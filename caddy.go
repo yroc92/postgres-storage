@@ -3,6 +3,7 @@ package certmagicsql
 import (
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/certmagic"
+	_ "github.com/lib/pq"
 )
 
 func init() {
@@ -18,5 +19,5 @@ func (PostgresStorage) CaddyModule() caddy.ModuleInfo {
 
 // CertMagicStorage converts s to a certmagic.Storage instance.
 func (s *PostgresStorage) CertMagicStorage() (certmagic.Storage, error) {
-	return s, nil
+	return NewStorage(*s)
 }

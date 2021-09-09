@@ -3,10 +3,12 @@ package certmagicsql
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/caddyserver/certmagic"
+	_ "github.com/lib/pq"
 )
 
 var (
@@ -24,28 +26,34 @@ type DB interface {
 // NewStorage creates a new storage instance. The `db` you pass in will likely be a
 // *database/sql.DB. This method will create the required metadata tables if necessary
 // (certmagic_data and certmagic_locks).
-func NewStorage(db DB, options Options) (certmagic.Storage, error) {
-	if options.QueryTimeout == 0 {
-		options.QueryTimeout = time.Second * 3
+func NewStorage(storage PostgresStorage) (certmagic.Storage, error) {
+	if storage.QueryTimeout == 0 {
+		storage.QueryTimeout = time.Second * 3
 	}
-	if options.LockTimeout == 0 {
-		options.LockTimeout = time.Minute
+	if storage.LockTimeout == 0 {
+		storage.LockTimeout = time.Minute
 	}
-	if options.Database != Postgres {
-		return nil, fmt.Errorf("unsupported database")
+	if len(storage.ConnectionString) == 0 {
+		return nil, errors.New("please provide a valid Postgres connection URL")
+	}
+	database, err := sql.Open("postgres", storage.ConnectionString)
+	if err != nil {
+		return nil, err
 	}
 	s := &PostgresStorage{
-		Database:     db,
-		QueryTimeout: options.QueryTimeout,
-		LockTimeout:  options.LockTimeout,
+		Database:         database,
+		QueryTimeout:     storage.QueryTimeout,
+		LockTimeout:      storage.LockTimeout,
+		ConnectionString: storage.ConnectionString,
 	}
 	return s, s.ensureTableSetup()
 }
 
 type PostgresStorage struct {
-	Database     DB            `json:"database,omitempty"`
-	QueryTimeout time.Duration `json:"query_timeout,omitempty"`
-	LockTimeout  time.Duration `json:"lock_timeout,omitempty"`
+	QueryTimeout     time.Duration `json:"query_timeout,omitempty"`
+	LockTimeout      time.Duration `json:"lock_timeout,omitempty"`
+	Database         *sql.DB       `json:"-"`
+	ConnectionString string        `json:"connection_string,omitempty"`
 }
 
 // Database RDBs this library supports, currently supports Postgres only.
@@ -54,12 +62,6 @@ type Database int
 const (
 	Postgres Database = iota
 )
-
-type Options struct {
-	QueryTimeout time.Duration `json:"query_timeout,omitempty"`
-	LockTimeout  time.Duration `json:"lock_timeout,omitempty"`
-	Database     Database      `json:"database,omitempty"`
-}
 
 func (s *PostgresStorage) ensureTableSetup() error {
 	ctx, cancel := context.WithTimeout(context.Background(), s.QueryTimeout)

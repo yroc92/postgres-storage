@@ -2,15 +2,21 @@ package certmagicsql
 
 import (
 	"github.com/caddyserver/caddy/v2"
+	"github.com/caddyserver/certmagic"
 )
 
 func init() {
-	caddy.RegisterModule(Options{})
+	caddy.RegisterModule(PostgresStorage{})
 }
 
-func (Options) CaddyModule() caddy.ModuleInfo {
+func (PostgresStorage) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
 		ID:  "caddy.storage.postgres",
-		New: func() caddy.Module { return new(Options) },
+		New: func() caddy.Module { return new(PostgresStorage) },
 	}
+}
+
+// CertMagicStorage converts s to a certmagic.Storage instance.
+func (s *PostgresStorage) CertMagicStorage() (certmagic.Storage, error) {
+	return s, nil
 }

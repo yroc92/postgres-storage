@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	_ certmagic.Storage = (*postgresStorage)(nil)
+	_ certmagic.Storage = (*PostgresStorage)(nil)
 )
 
 // DB represents the required database API. You can use a *database/sql.DB.
@@ -34,18 +34,18 @@ func NewStorage(db DB, options Options) (certmagic.Storage, error) {
 	if options.Database != Postgres {
 		return nil, fmt.Errorf("unsupported database")
 	}
-	s := &postgresStorage{
-		db:           db,
-		queryTimeout: options.QueryTimeout,
-		lockTimeout:  options.LockTimeout,
+	s := &PostgresStorage{
+		Database:     db,
+		QueryTimeout: options.QueryTimeout,
+		LockTimeout:  options.LockTimeout,
 	}
 	return s, s.ensureTableSetup()
 }
 
-type postgresStorage struct {
-	db           DB
-	queryTimeout time.Duration
-	lockTimeout  time.Duration
+type PostgresStorage struct {
+	Database     DB            `json:"database,omitempty"`
+	QueryTimeout time.Duration `json:"query_timeout,omitempty"`
+	LockTimeout  time.Duration `json:"lock_timeout,omitempty"`
 }
 
 // Database RDBs this library supports, currently supports Postgres only.
@@ -61,10 +61,10 @@ type Options struct {
 	Database     Database      `json:"database,omitempty"`
 }
 
-func (s *postgresStorage) ensureTableSetup() error {
-	ctx, cancel := context.WithTimeout(context.Background(), s.queryTimeout)
+func (s *PostgresStorage) ensureTableSetup() error {
+	ctx, cancel := context.WithTimeout(context.Background(), s.QueryTimeout)
 	defer cancel()
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.Database.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -88,11 +88,11 @@ expires timestamptz default current_timestamp
 }
 
 // Lock the key and implement certmagic.Storage.Lock.
-func (s *postgresStorage) Lock(ctx context.Context, key string) error {
-	ctx, cancel := context.WithTimeout(ctx, s.queryTimeout)
+func (s *PostgresStorage) Lock(ctx context.Context, key string) error {
+	ctx, cancel := context.WithTimeout(ctx, s.QueryTimeout)
 	defer cancel()
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.Database.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -101,7 +101,7 @@ func (s *postgresStorage) Lock(ctx context.Context, key string) error {
 		return err
 	}
 
-	expires := time.Now().Add(s.lockTimeout)
+	expires := time.Now().Add(s.LockTimeout)
 	if _, err := tx.ExecContext(ctx, `insert into certmagic_locks (key, expires) values ($1, $2) on conflict (key) do update set expires = $2`, key, expires); err != nil {
 		return fmt.Errorf("failed to lock key: %s: %w", key, err)
 	}
@@ -110,10 +110,10 @@ func (s *postgresStorage) Lock(ctx context.Context, key string) error {
 }
 
 // Unlock the key and implement certmagic.Storage.Unlock.
-func (s *postgresStorage) Unlock(key string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), s.queryTimeout)
+func (s *PostgresStorage) Unlock(key string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), s.QueryTimeout)
 	defer cancel()
-	_, err := s.db.ExecContext(ctx, `delete from certmagic_locks where key = $1`, key)
+	_, err := s.Database.ExecContext(ctx, `delete from certmagic_locks where key = $1`, key)
 	return err
 }
 
@@ -122,8 +122,8 @@ type queryer interface {
 }
 
 // isLocked returns nil if the key is not locked.
-func (s *postgresStorage) isLocked(queryer queryer, key string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), s.queryTimeout)
+func (s *PostgresStorage) isLocked(queryer queryer, key string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), s.QueryTimeout)
 	defer cancel()
 	row := queryer.QueryRowContext(ctx, `select exists(select 1 from certmagic_locks where key = $1 and expires > current_timestamp)`, key)
 	var locked bool
@@ -137,19 +137,19 @@ func (s *postgresStorage) isLocked(queryer queryer, key string) error {
 }
 
 // Store puts value at key.
-func (s *postgresStorage) Store(key string, value []byte) error {
-	ctx, cancel := context.WithTimeout(context.Background(), s.queryTimeout)
+func (s *PostgresStorage) Store(key string, value []byte) error {
+	ctx, cancel := context.WithTimeout(context.Background(), s.QueryTimeout)
 	defer cancel()
-	_, err := s.db.ExecContext(ctx, "insert into certmagic_data (key, value) values ($1, $2) on conflict (key) do update set value = $2, modified = current_timestamp", key, value)
+	_, err := s.Database.ExecContext(ctx, "insert into certmagic_data (key, value) values ($1, $2) on conflict (key) do update set value = $2, modified = current_timestamp", key, value)
 	return err
 }
 
 // Load retrieves the value at key.
-func (s *postgresStorage) Load(key string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), s.queryTimeout)
+func (s *PostgresStorage) Load(key string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), s.QueryTimeout)
 	defer cancel()
 	var value []byte
-	err := s.db.QueryRowContext(ctx, "select value from certmagic_data where key = $1", key).Scan(&value)
+	err := s.Database.QueryRowContext(ctx, "select value from certmagic_data where key = $1", key).Scan(&value)
 	if err == sql.ErrNoRows {
 		return nil, certmagic.ErrNotExist(fmt.Errorf("key not found: %s", key))
 	}
@@ -159,19 +159,19 @@ func (s *postgresStorage) Load(key string) ([]byte, error) {
 // Delete deletes key. An error should be
 // returned only if the key still exists
 // when the method returns.
-func (s *postgresStorage) Delete(key string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), s.queryTimeout)
+func (s *PostgresStorage) Delete(key string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), s.QueryTimeout)
 	defer cancel()
-	_, err := s.db.ExecContext(ctx, "delete from certmagic_data where key = $1", key)
+	_, err := s.Database.ExecContext(ctx, "delete from certmagic_data where key = $1", key)
 	return err
 }
 
 // Exists returns true if the key exists
 // and there was no error checking.
-func (s *postgresStorage) Exists(key string) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), s.queryTimeout)
+func (s *PostgresStorage) Exists(key string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), s.QueryTimeout)
 	defer cancel()
-	row := s.db.QueryRowContext(ctx, "select exists(select 1 from certmagic_data where key = $1)", key)
+	row := s.Database.QueryRowContext(ctx, "select exists(select 1 from certmagic_data where key = $1)", key)
 	var exists bool
 	err := row.Scan(&exists)
 	return err == nil && exists
@@ -182,13 +182,13 @@ func (s *postgresStorage) Exists(key string) bool {
 // will be enumerated (i.e. "directories"
 // should be walked); otherwise, only keys
 // prefixed exactly by prefix will be listed.
-func (s *postgresStorage) List(prefix string, recursive bool) ([]string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), s.queryTimeout)
+func (s *PostgresStorage) List(prefix string, recursive bool) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), s.QueryTimeout)
 	defer cancel()
 	if recursive {
 		return nil, fmt.Errorf("recursive not supported")
 	}
-	rows, err := s.db.QueryContext(ctx, fmt.Sprintf(`select key from certmagic_data where key like '%s%%'`, prefix))
+	rows, err := s.Database.QueryContext(ctx, fmt.Sprintf(`select key from certmagic_data where key like '%s%%'`, prefix))
 	if err != nil {
 		return nil, err
 	}
@@ -205,12 +205,12 @@ func (s *postgresStorage) List(prefix string, recursive bool) ([]string, error) 
 }
 
 // Stat returns information about key.
-func (s *postgresStorage) Stat(key string) (certmagic.KeyInfo, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), s.queryTimeout)
+func (s *PostgresStorage) Stat(key string) (certmagic.KeyInfo, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), s.QueryTimeout)
 	defer cancel()
 	var modified time.Time
 	var size int64
-	row := s.db.QueryRowContext(ctx, "select length(value), modified from certmagic_data where key = $1", key)
+	row := s.Database.QueryRowContext(ctx, "select length(value), modified from certmagic_data where key = $1", key)
 	err := row.Scan(&size, &modified)
 	if err != nil {
 		return certmagic.KeyInfo{}, err

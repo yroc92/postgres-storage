@@ -15,11 +15,11 @@ import (
 	_ "github.com/lib/pq"
 )
 
-func setup(t *testing.T) *postgresStorage {
+func setup(t *testing.T) *PostgresStorage {
 	return setupWithOptions(t, Options{})
 }
 
-func setupWithOptions(t *testing.T, options Options) *postgresStorage {
+func setupWithOptions(t *testing.T, options Options) *PostgresStorage {
 	connStr := os.Getenv("CONN_STR")
 	if connStr == "" {
 		t.Skipf("must set CONN_STR")
@@ -217,13 +217,13 @@ func TestLockLocks(t *testing.T) {
 	if err := storage.Lock(ctx, key); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.isLocked(storage.db, key); err == nil {
+	if err := storage.isLocked(storage.Database, key); err == nil {
 		t.Fatalf("key should be locked")
 	}
 	if err := storage.Unlock(key); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.isLocked(storage.db, key); err != nil {
+	if err := storage.isLocked(storage.Database, key); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -236,11 +236,11 @@ func TestLockExpires(t *testing.T) {
 	if err := storage.Lock(ctx, key); err != nil {
 		t.Fatal(err)
 	}
-	if err := storage.isLocked(storage.db, key); err == nil {
+	if err := storage.isLocked(storage.Database, key); err == nil {
 		t.Fatalf("key should be locked")
 	}
 	time.Sleep(200 * time.Millisecond)
-	if err := storage.isLocked(storage.db, key); err != nil {
+	if err := storage.isLocked(storage.Database, key); err != nil {
 		t.Fatal(err)
 	}
 }

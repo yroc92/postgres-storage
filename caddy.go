@@ -3,7 +3,6 @@ package certmagicsql
 import (
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/certmagic"
-	_ "github.com/lib/pq"
 )
 
 func init() {

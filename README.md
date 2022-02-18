@@ -10,15 +10,12 @@ gladly merge.
 
 # Example
 
-```go
-db, err := sql.Open("postgres", "conninfo")
-if err != nil { ... }
-storage, err := certmagicsql.NewStorage(
-    db,
-    certmagicsql.Options{},
-)
-if err != nil { ... }
-certmagic.Default.Storage = storage
+At the top level of your Caddy JSON config:
+```json
+	"storage": {
+		"module": "postgres",
+		"connection_string": "postgres://user:password@localhost:5432/postgres"
+	},
 ```
 
 # LICENSE

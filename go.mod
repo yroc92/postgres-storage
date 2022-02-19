@@ -3,8 +3,8 @@ module github.com/yroc92/postgres-storage
 go 1.17
 
 require (
-	github.com/caddyserver/caddy/v2 v2.4.6
-	github.com/caddyserver/certmagic v0.15.3
+	github.com/caddyserver/caddy/v2 v2.4.7-0.20220218055825-ff137d17d008
+	github.com/caddyserver/certmagic v0.15.4-0.20220217213750-797d29bcf32f
 )
 
 require (

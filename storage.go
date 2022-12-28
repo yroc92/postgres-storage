@@ -29,8 +29,8 @@ type PostgresStorage struct {
 	Port         string        `json:"port"`
 	User         string        `json:"user"`
 	Password     string        `json:"password"`
-	DB           string        `json:"db"`
-	SSL          string        `json:"ssl"`
+	DB           string        `json:"dbname"`
+	SSL          string        `json:"sslmode"`
 }
 
 func init() {
@@ -58,7 +58,7 @@ func (c *PostgresStorage) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 			c.Password = value
 		case "dbname":
 			c.DB = value
-		case "ssl":
+		case "sslmode":
 			c.SSL = value
 		}
 	}

@@ -137,7 +137,7 @@ expires timestamptz default current_timestamp
 }
 
 // Lock the key and implement certmagic.Storage.Lock.
-func (s *PostgresStorage) Lock(ctx context.Context, key string) error {
+func (s PostgresStorage) Lock(ctx context.Context, key string) error {
 	ctx, cancel := context.WithTimeout(ctx, s.QueryTimeout)
 	defer cancel()
 
@@ -159,7 +159,7 @@ func (s *PostgresStorage) Lock(ctx context.Context, key string) error {
 }
 
 // Unlock the key and implement certmagic.Storage.Unlock.
-func (s *PostgresStorage) Unlock(ctx context.Context, key string) error {
+func (s PostgresStorage) Unlock(ctx context.Context, key string) error {
 	ctx, cancel := context.WithTimeout(ctx, s.QueryTimeout)
 	defer cancel()
 	_, err := s.Database.ExecContext(ctx, `delete from certmagic_locks where key = $1`, key)
@@ -171,7 +171,7 @@ type queryer interface {
 }
 
 // isLocked returns nil if the key is not locked.
-func (s *PostgresStorage) isLocked(queryer queryer, key string) error {
+func (s PostgresStorage) isLocked(queryer queryer, key string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), s.QueryTimeout)
 	defer cancel()
 	row := queryer.QueryRowContext(ctx, `select exists(select 1 from certmagic_locks where key = $1 and expires > current_timestamp)`, key)
@@ -186,7 +186,7 @@ func (s *PostgresStorage) isLocked(queryer queryer, key string) error {
 }
 
 // Store puts value at key.
-func (s *PostgresStorage) Store(ctx context.Context, key string, value []byte) error {
+func (s PostgresStorage) Store(ctx context.Context, key string, value []byte) error {
 	ctx, cancel := context.WithTimeout(ctx, s.QueryTimeout)
 	defer cancel()
 	_, err := s.Database.ExecContext(ctx, "insert into certmagic_data (key, value) values ($1, $2) on conflict (key) do update set value = $2, modified = current_timestamp", key, value)
@@ -194,7 +194,7 @@ func (s *PostgresStorage) Store(ctx context.Context, key string, value []byte) e
 }
 
 // Load retrieves the value at key.
-func (s *PostgresStorage) Load(ctx context.Context, key string) ([]byte, error) {
+func (s PostgresStorage) Load(ctx context.Context, key string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, s.QueryTimeout)
 	defer cancel()
 	var value []byte
@@ -208,7 +208,7 @@ func (s *PostgresStorage) Load(ctx context.Context, key string) ([]byte, error) 
 // Delete deletes key. An error should be
 // returned only if the key still exists
 // when the method returns.
-func (s *PostgresStorage) Delete(ctx context.Context, key string) error {
+func (s PostgresStorage) Delete(ctx context.Context, key string) error {
 	ctx, cancel := context.WithTimeout(ctx, s.QueryTimeout)
 	defer cancel()
 	_, err := s.Database.ExecContext(ctx, "delete from certmagic_data where key = $1", key)
@@ -217,7 +217,7 @@ func (s *PostgresStorage) Delete(ctx context.Context, key string) error {
 
 // Exists returns true if the key exists
 // and there was no error checking.
-func (s *PostgresStorage) Exists(ctx context.Context, key string) bool {
+func (s PostgresStorage) Exists(ctx context.Context, key string) bool {
 	ctx, cancel := context.WithTimeout(ctx, s.QueryTimeout)
 	defer cancel()
 	row := s.Database.QueryRowContext(ctx, "select exists(select 1 from certmagic_data where key = $1)", key)
@@ -231,7 +231,7 @@ func (s *PostgresStorage) Exists(ctx context.Context, key string) bool {
 // will be enumerated (i.e. "directories"
 // should be walked); otherwise, only keys
 // prefixed exactly by prefix will be listed.
-func (s *PostgresStorage) List(ctx context.Context, prefix string, recursive bool) ([]string, error) {
+func (s PostgresStorage) List(ctx context.Context, prefix string, recursive bool) ([]string, error) {
 	ctx, cancel := context.WithTimeout(ctx, s.QueryTimeout)
 	defer cancel()
 	if recursive {
@@ -254,7 +254,7 @@ func (s *PostgresStorage) List(ctx context.Context, prefix string, recursive boo
 }
 
 // Stat returns information about key.
-func (s *PostgresStorage) Stat(ctx context.Context, key string) (certmagic.KeyInfo, error) {
+func (s PostgresStorage) Stat(ctx context.Context, key string) (certmagic.KeyInfo, error) {
 	ctx, cancel := context.WithTimeout(ctx, s.QueryTimeout)
 	defer cancel()
 	var modified time.Time

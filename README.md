@@ -73,6 +73,41 @@ deploy:
     caddy_0.storage.dbname: certmagictest
     caddy_0.storage.sslmode: disable
 ```
+
+# Build vanilla Docker image
+```Dockerfile
+# Version to build
+ARG CADDY_VERSION="2.6.2"
+
+FROM caddy:${CADDY_VERSION}-builder AS builder
+
+RUN xcaddy build \
+    --with github.com/gabrielmocan/postgres-storage
+
+FROM caddy:${CADDY_VERSION}-alpine
+
+COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+```
+
+# Build Docker image with docker-proxy support and Cloudflare resolver support
+```Dockerfile
+# Version to build
+ARG CADDY_VERSION="2.6.2"
+
+FROM caddy:${CADDY_VERSION}-builder AS builder
+
+RUN xcaddy build \
+    --with github.com/gabrielmocan/postgres-storage      \
+    --with github.com/lucaslorentz/caddy-docker-proxy/v2 \
+    --with github.com/caddy-dns/cloudflare
+
+FROM caddy:${CADDY_VERSION}-alpine
+
+COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+
+CMD ["caddy", "docker-proxy"]
+```
+
 # LICENSE
 
 MIT

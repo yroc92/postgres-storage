@@ -13,13 +13,20 @@ gladly merge.
 Now with support for Caddyfile and environment configuration.
 
 # Example
+- Valid values for sslmode are: disable, require, verify-ca, verify-full
 
 At the top level of your Caddy JSON config:
 ```json
 {
 	  "storage": {
 	    	"module": "postgres",
-	    	"connection_string": "postgres://user:password@localhost:5432/certmagictest"
+	    	"dbname": "certmagictest",
+		"host": "localhost",
+		"module": "postgres",
+		"password": "postgres",
+		"port": "5432",
+		"sslmode": "disable",
+		"user": "postgres"
 	  }
 	  "app": {
 	    	...
@@ -37,7 +44,7 @@ With Caddyfile:
 		host localhost
 		password postgres
 		port 5432
-		sslmode disable # Valid values for sslmode are: disable, require, verify-ca, verify-full
+		sslmode disable
 		user postgres
 	}
 }

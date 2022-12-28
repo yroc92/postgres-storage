@@ -30,7 +30,7 @@ type PostgresStorage struct {
 	User         string        `json:"user"`
 	Password     string        `json:"password"`
 	DBname       string        `json:"dbname"`
-	SSLmode      string        `json:"sslmode"`
+	SSLmode      string        `json:"sslmode"` // Valid values for sslmode are: disable, require, verify-ca, verify-full
 }
 
 func init() {

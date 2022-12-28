@@ -8,6 +8,9 @@ import (
 	"io/fs"
 	"time"
 
+	"github.com/caddyserver/caddy/v2"
+	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
+	"go.uber.org/zap"
 	"github.com/caddyserver/certmagic"
 	_ "github.com/lib/pq"
 )
@@ -16,45 +19,87 @@ var (
 	_ certmagic.Storage = (*PostgresStorage)(nil)
 )
 
+type PostgresStorage struct {
+	logger *zap.Logger
+
+	QueryTimeout     time.Duration `json:"query_timeout,omitempty"`
+	LockTimeout      time.Duration `json:"lock_timeout,omitempty"`
+	Database         *sql.DB       `json:"-"`
+	ConnectionString string        `json:"connection_string,omitempty"`
+}
+
+func init() {
+	caddy.RegisterModule(PostgresStorage{})
+}
+
+func (s *PostgresStorage) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
+	for d.Next() {
+		var value string
+
+		key := d.Val()
+
+		if !d.Args(&value) {
+			continue
+		}
+
+		switch key {
+		case "conn_string":
+			s.ConnectionString = value
+		}
+	}
+
+	return nil
+}
+
+func (s *PostgresStorage) Provision(ctx caddy.Context) error {
+	s.logger = ctx.Logger(s)
+
+	// Load Environment
+	if s.ConnectionString == "" {
+		s.ConnectionString = os.Getenv("POSTGRES_CONN_STRING")
+	}
+	if s.QueryTimeout == 0 {
+		s.QueryTimeout = time.Second * 3
+	}
+	if s.LockTimeout == 0 {
+		s.LockTimeout = time.Minute
+	}
+
+	// Postgres Client
+	database, err := sql.Open("postgres", s.ConnectionString)
+	if err != nil {
+		return err
+	} else {
+		s.Client := &PostgresStorage{
+			Database:         database,
+			QueryTimeout:     s.QueryTimeout,
+			LockTimeout:      s.LockTimeout,
+			ConnectionString: s.ConnectionString,
+		}
+	}
+
+	return nil
+}
+
+func (PostgresStorage) CaddyModule() caddy.ModuleInfo {
+	return caddy.ModuleInfo{
+		ID: "caddy.storage.postgres",
+		New: func() caddy.Module {
+			return new(PostgresStorage)
+		},
+	}
+}
+
+func (s PostgresStorage) CertMagicStorage() (certmagic.Storage, error) {
+	return s, s.Client.ensureTableSetup()
+}
+
 // DB represents the required database API. You can use a *database/sql.DB.
 type DB interface {
 	BeginTx(context.Context, *sql.TxOptions) (*sql.Tx, error)
 	ExecContext(context.Context, string, ...interface{}) (sql.Result, error)
 	QueryRowContext(context.Context, string, ...interface{}) *sql.Row
 	QueryContext(context.Context, string, ...interface{}) (*sql.Rows, error)
-}
-
-// NewStorage creates a new storage instance. The `db` you pass in will likely be a
-// *database/sql.DB. This method will create the required metadata tables if necessary
-// (certmagic_data and certmagic_locks).
-func NewStorage(storage PostgresStorage) (certmagic.Storage, error) {
-	if storage.QueryTimeout == 0 {
-		storage.QueryTimeout = time.Second * 3
-	}
-	if storage.LockTimeout == 0 {
-		storage.LockTimeout = time.Minute
-	}
-	if len(storage.ConnectionString) == 0 {
-		return nil, errors.New("please provide a valid Postgres connection URL")
-	}
-	database, err := sql.Open("postgres", storage.ConnectionString)
-	if err != nil {
-		return nil, err
-	}
-	s := &PostgresStorage{
-		Database:         database,
-		QueryTimeout:     storage.QueryTimeout,
-		LockTimeout:      storage.LockTimeout,
-		ConnectionString: storage.ConnectionString,
-	}
-	return s, s.ensureTableSetup()
-}
-
-type PostgresStorage struct {
-	QueryTimeout     time.Duration `json:"query_timeout,omitempty"`
-	LockTimeout      time.Duration `json:"lock_timeout,omitempty"`
-	Database         *sql.DB       `json:"-"`
-	ConnectionString string        `json:"connection_string,omitempty"`
 }
 
 // Database RDBs this library supports, currently supports Postgres only.
@@ -91,7 +136,7 @@ expires timestamptz default current_timestamp
 }
 
 // Lock the key and implement certmagic.Storage.Lock.
-func (s *PostgresStorage) Lock(ctx context.Context, key string) error {
+func (s.Client *PostgresStorage) Lock(ctx context.Context, key string) error {
 	ctx, cancel := context.WithTimeout(ctx, s.QueryTimeout)
 	defer cancel()
 
@@ -113,7 +158,7 @@ func (s *PostgresStorage) Lock(ctx context.Context, key string) error {
 }
 
 // Unlock the key and implement certmagic.Storage.Unlock.
-func (s *PostgresStorage) Unlock(ctx context.Context, key string) error {
+func (s.Client *PostgresStorage) Unlock(ctx context.Context, key string) error {
 	ctx, cancel := context.WithTimeout(ctx, s.QueryTimeout)
 	defer cancel()
 	_, err := s.Database.ExecContext(ctx, `delete from certmagic_locks where key = $1`, key)
@@ -125,7 +170,7 @@ type queryer interface {
 }
 
 // isLocked returns nil if the key is not locked.
-func (s *PostgresStorage) isLocked(queryer queryer, key string) error {
+func (s.Client *PostgresStorage) isLocked(queryer queryer, key string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), s.QueryTimeout)
 	defer cancel()
 	row := queryer.QueryRowContext(ctx, `select exists(select 1 from certmagic_locks where key = $1 and expires > current_timestamp)`, key)
@@ -140,7 +185,7 @@ func (s *PostgresStorage) isLocked(queryer queryer, key string) error {
 }
 
 // Store puts value at key.
-func (s *PostgresStorage) Store(ctx context.Context, key string, value []byte) error {
+func (s.Client *PostgresStorage) Store(ctx context.Context, key string, value []byte) error {
 	ctx, cancel := context.WithTimeout(ctx, s.QueryTimeout)
 	defer cancel()
 	_, err := s.Database.ExecContext(ctx, "insert into certmagic_data (key, value) values ($1, $2) on conflict (key) do update set value = $2, modified = current_timestamp", key, value)
@@ -148,7 +193,7 @@ func (s *PostgresStorage) Store(ctx context.Context, key string, value []byte) e
 }
 
 // Load retrieves the value at key.
-func (s *PostgresStorage) Load(ctx context.Context, key string) ([]byte, error) {
+func (s.Client *PostgresStorage) Load(ctx context.Context, key string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, s.QueryTimeout)
 	defer cancel()
 	var value []byte
@@ -162,7 +207,7 @@ func (s *PostgresStorage) Load(ctx context.Context, key string) ([]byte, error) 
 // Delete deletes key. An error should be
 // returned only if the key still exists
 // when the method returns.
-func (s *PostgresStorage) Delete(ctx context.Context, key string) error {
+func (s.Client *PostgresStorage) Delete(ctx context.Context, key string) error {
 	ctx, cancel := context.WithTimeout(ctx, s.QueryTimeout)
 	defer cancel()
 	_, err := s.Database.ExecContext(ctx, "delete from certmagic_data where key = $1", key)
@@ -171,7 +216,7 @@ func (s *PostgresStorage) Delete(ctx context.Context, key string) error {
 
 // Exists returns true if the key exists
 // and there was no error checking.
-func (s *PostgresStorage) Exists(ctx context.Context, key string) bool {
+func (s.Client *PostgresStorage) Exists(ctx context.Context, key string) bool {
 	ctx, cancel := context.WithTimeout(ctx, s.QueryTimeout)
 	defer cancel()
 	row := s.Database.QueryRowContext(ctx, "select exists(select 1 from certmagic_data where key = $1)", key)
@@ -185,7 +230,7 @@ func (s *PostgresStorage) Exists(ctx context.Context, key string) bool {
 // will be enumerated (i.e. "directories"
 // should be walked); otherwise, only keys
 // prefixed exactly by prefix will be listed.
-func (s *PostgresStorage) List(ctx context.Context, prefix string, recursive bool) ([]string, error) {
+func (s.Client *PostgresStorage) List(ctx context.Context, prefix string, recursive bool) ([]string, error) {
 	ctx, cancel := context.WithTimeout(ctx, s.QueryTimeout)
 	defer cancel()
 	if recursive {
@@ -208,7 +253,7 @@ func (s *PostgresStorage) List(ctx context.Context, prefix string, recursive boo
 }
 
 // Stat returns information about key.
-func (s *PostgresStorage) Stat(ctx context.Context, key string) (certmagic.KeyInfo, error) {
+func (s.Client *PostgresStorage) Stat(ctx context.Context, key string) (certmagic.KeyInfo, error) {
 	ctx, cancel := context.WithTimeout(ctx, s.QueryTimeout)
 	defer cancel()
 	var modified time.Time

@@ -29,8 +29,8 @@ type PostgresStorage struct {
 	Port         string        `json:"port"`
 	User         string        `json:"user"`
 	Password     string        `json:"password"`
-	DB           string        `json:"dbname"`
-	SSL          string        `json:"sslmode"`
+	DBname       string        `json:"dbname"`
+	SSLmode      string        `json:"sslmode"`
 }
 
 func init() {
@@ -57,9 +57,9 @@ func (c *PostgresStorage) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 		case "password":
 			c.Password = value
 		case "dbname":
-			c.DB = value
+			c.DBname = value
 		case "sslmode":
-			c.SSL = value
+			c.SSLmode = value
 		}
 	}
 
@@ -82,11 +82,11 @@ func (c *PostgresStorage) Provision(ctx caddy.Context) error {
 	if c.Password == "" {
 		c.Password = os.Getenv("POSTGRES_PASSWORD")
 	}
-	if c.DB == "" {
-		c.DB = os.Getenv("POSTGRES_DB")
+	if c.DBname == "" {
+		c.DBname = os.Getenv("POSTGRES_DB")
 	}
-	if c.SSL == "" {
-		c.SSL = os.Getenv("POSTGRES_SSL")
+	if c.SSLmode == "" {
+		c.SSLmode = os.Getenv("POSTGRES_SSL")
 	}
 	if c.QueryTimeout == 0 {
 		c.QueryTimeout = time.Second * 3
@@ -110,7 +110,7 @@ func (PostgresStorage) CaddyModule() caddy.ModuleInfo {
 func NewStorage(c PostgresStorage) (certmagic.Storage, error) {
 	connStr := "host=%s port=%s user=%s password=%s dbname=%s sslmode=%s"
 	// Set each value dynamically w/ Sprintf
-	connStr = fmt.Sprintf(connStr, c.Host, c.Port, c.User, c.Password, c.DB, c.SSL)
+	connStr = fmt.Sprintf(connStr, c.Host, c.Port, c.User, c.Password, c.DBname, c.SSLmode)
 
 	database, err := sql.Open("postgres", connStr)
 	if err != nil {

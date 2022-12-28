@@ -1,4 +1,4 @@
-package certmagicsql
+package certmagicsqlcaddyfile
 
 import (
 	"context"
@@ -70,7 +70,7 @@ func (s *PostgresStorage) Provision(ctx caddy.Context) error {
 	if err != nil {
 		return err
 	} else {
-		s.Client := &PostgresStorage{
+		s.Client = &PostgresStorage{
 			Database:         database,
 			QueryTimeout:     s.QueryTimeout,
 			LockTimeout:      s.LockTimeout,

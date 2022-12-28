@@ -83,10 +83,10 @@ func (c *PostgresStorage) Provision(ctx caddy.Context) error {
 		c.Password = os.Getenv("POSTGRES_PASSWORD")
 	}
 	if c.DBname == "" {
-		c.DBname = os.Getenv("POSTGRES_DB")
+		c.DBname = os.Getenv("POSTGRES_DBNAME")
 	}
 	if c.SSLmode == "" {
-		c.SSLmode = os.Getenv("POSTGRES_SSL")
+		c.SSLmode = os.Getenv("POSTGRES_SSLMODE")
 	}
 	if c.QueryTimeout == 0 {
 		c.QueryTimeout = time.Second * 3

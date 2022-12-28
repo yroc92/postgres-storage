@@ -22,10 +22,15 @@ var (
 type PostgresStorage struct {
 	logger *zap.Logger
 
-	QueryTimeout     time.Duration `json:"query_timeout,omitempty"`
-	LockTimeout      time.Duration `json:"lock_timeout,omitempty"`
-	Database         *sql.DB       `json:"-"`
-	ConnectionString string        `json:"connection_string,omitempty"`
+	QueryTimeout time.Duration `json:"query_timeout,omitempty"`
+	LockTimeout  time.Duration `json:"lock_timeout,omitempty"`
+	Database     *sql.DB       `json:"-"`
+	Host         string        `json:"host"`
+	Port         string        `json:"port"`
+	User         string        `json:"user"`
+	Password     string        `json:"password"`
+	DB           string        `json:"db"`
+	SSL          string        `json:"ssl"`
 }
 
 func init() {
@@ -43,8 +48,18 @@ func (c *PostgresStorage) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 		}
 
 		switch key {
-		case "conn_string":
-			c.ConnectionString = value
+		case "host":
+			c.Host = value
+		case "port":
+			c.Port = value
+		case "user":
+			c.User = value
+		case "password":
+			c.Password = value
+		case "dbname":
+			c.DB = value
+		case "ssl":
+			c.SSL = value
 		}
 	}
 
@@ -55,8 +70,23 @@ func (c *PostgresStorage) Provision(ctx caddy.Context) error {
 	c.logger = ctx.Logger(c)
 
 	// Load Environment
-	if c.ConnectionString == "" {
-		c.ConnectionString = os.Getenv("POSTGRES_CONN_STRING")
+	if c.Host == "" {
+		c.Host = os.Getenv("POSTGRES_HOST")
+	}
+	if c.Port == "" {
+		c.Port = os.Getenv("POSTGRES_PORT")
+	}
+	if c.User == "" {
+		c.User = os.Getenv("POSTGRES_USER")
+	}
+	if c.Password == "" {
+		c.Password = os.Getenv("POSTGRES_PASSWORD")
+	}
+	if c.DB == "" {
+		c.DB = os.Getenv("POSTGRES_DB")
+	}
+	if c.SSL == "" {
+		c.SSL = os.Getenv("POSTGRES_SSL")
 	}
 	if c.QueryTimeout == 0 {
 		c.QueryTimeout = time.Second * 3
@@ -78,21 +108,24 @@ func (PostgresStorage) CaddyModule() caddy.ModuleInfo {
 }
 
 func NewStorage(c PostgresStorage) (certmagic.Storage, error) {
-	database, err := sql.Open("postgres", c.ConnectionString)
+	connStr := "host=%s port=%s user=%s password=%s dbname=%s sslmode=%s"
+	// Set each value dynamically w/ Sprintf
+	connStr = fmt.Sprintf(connStr, c.Host, c.Port, c.User, c.Password, c.DB, c.SSL)
+
+	database, err := sql.Open("postgres", connStr)
 	if err != nil {
 		return nil, err
 	}
 	s := &PostgresStorage{
-		Database:         database,
-		QueryTimeout:     c.QueryTimeout,
-		LockTimeout:      c.LockTimeout,
-		ConnectionString: c.ConnectionString,
+		Database:     database,
+		QueryTimeout: c.QueryTimeout,
+		LockTimeout:  c.LockTimeout,
 	}
 	return s, s.ensureTableSetup()
 }
 
-func (s *PostgresStorage) CertMagicStorage() (certmagic.Storage, error) {
-	return NewStorage(*s)
+func (c *PostgresStorage) CertMagicStorage() (certmagic.Storage, error) {
+	return NewStorage(*c)
 }
 
 // DB represents the required database API. You can use a *database/sql.DB.

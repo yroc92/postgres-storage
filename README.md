@@ -15,7 +15,7 @@ Now with support for Caddyfile and environment configuration.
 # Example
 - Valid values for sslmode are: disable, require, verify-ca, verify-full
 
-At the top level of your Caddy JSON config:
+With vanilla JSON config file:
 ```json
 {
 	  "storage": {
@@ -60,6 +60,19 @@ POSTGRES_DBNAME
 POSTGRES_SSLMODE
 ```
 
+Configuring with labels for usage with Swarm and docker-proxy (https://github.com/lucaslorentz/caddy-docker-proxy):
+```yaml
+deploy:
+  labels:
+    # Set Storage definitions
+    caddy_0.storage: postgres
+    caddy_0.storage.host: localhost
+    caddy_0.storage.port: "5432"
+    caddy_0.storage.user: postgres
+    caddy_0.storage.password: postgres
+    caddy_0.storage.dbname: certmagictest
+    caddy_0.storage.sslmode: disable
+```
 # LICENSE
 
 MIT

@@ -20,7 +20,6 @@ With vanilla JSON config file:
 	    	"module": "postgres",
 	    	"dbname": "certmagictest",
 		"host": "localhost",
-		"module": "postgres",
 		"password": "postgres",
 		"port": "5432",
 		"sslmode": "disable",

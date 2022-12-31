@@ -1,4 +1,4 @@
-package certmagicsqlcaddyfile
+package certmagicsql
 
 import (
 	"bytes"

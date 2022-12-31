@@ -22,15 +22,16 @@ var (
 type PostgresStorage struct {
 	logger *zap.Logger
 
-	QueryTimeout time.Duration `json:"query_timeout,omitempty"`
-	LockTimeout  time.Duration `json:"lock_timeout,omitempty"`
-	Database     *sql.DB       `json:"-"`
-	Host         string        `json:"host"`
-	Port         string        `json:"port"`
-	User         string        `json:"user"`
-	Password     string        `json:"password"`
-	DBname       string        `json:"dbname"`
-	SSLmode      string        `json:"sslmode"` // Valid values for sslmode are: disable, require, verify-ca, verify-full
+	QueryTimeout     time.Duration `json:"query_timeout,omitempty"`
+	LockTimeout      time.Duration `json:"lock_timeout,omitempty"`
+	Database         *sql.DB       `json:"-"`
+	Host             string        `json:"host,omitempty"`
+	Port             string        `json:"port,omitempty"`
+	User             string        `json:"user,omitempty"`
+	Password         string        `json:"password,omitempty"`
+	DBname           string        `json:"dbname,omitempty"`
+	SSLmode          string        `json:"sslmode,omitempty"` // Valid values for sslmode are: disable, require, verify-ca, verify-full
+	ConnectionString string        `json:"connection_string,omitempty"`
 }
 
 func init() {
@@ -60,6 +61,8 @@ func (c *PostgresStorage) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 			c.DBname = value
 		case "sslmode":
 			c.SSLmode = value
+		case "connection_string":
+			c.ConnectionString = value
 		}
 	}
 
@@ -88,6 +91,9 @@ func (c *PostgresStorage) Provision(ctx caddy.Context) error {
 	if c.SSLmode == "" {
 		c.SSLmode = os.Getenv("POSTGRES_SSLMODE")
 	}
+	if c.ConnectionString == "" {
+		c.ConnectionString = os.Getenv("POSTGRES_CONN_STRING")
+	}
 	if c.QueryTimeout == 0 {
 		c.QueryTimeout = time.Second * 3
 	}
@@ -108,9 +114,14 @@ func (PostgresStorage) CaddyModule() caddy.ModuleInfo {
 }
 
 func NewStorage(c PostgresStorage) (certmagic.Storage, error) {
-	connStr := "host=%s port=%s user=%s password=%s dbname=%s sslmode=%s"
-	// Set each value dynamically w/ Sprintf
-	connStr = fmt.Sprintf(connStr, c.Host, c.Port, c.User, c.Password, c.DBname, c.SSLmode)
+	var connStr string
+	if len(c.ConnectionString) > 0 {
+		connStr = c.ConnectionString
+	} else {
+		connStr_fmt := "host=%s port=%s user=%s password=%s dbname=%s sslmode=%s"
+		// Set each value dynamically w/ Sprintf
+		connStr = fmt.Sprintf(connStr_fmt, c.Host, c.Port, c.User, c.Password, c.DBname, c.SSLmode)
+	}
 
 	database, err := sql.Open("postgres", connStr)
 	if err != nil {

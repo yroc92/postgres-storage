@@ -1,4 +1,4 @@
-module github.com/gabrielmocan/postgres-storage
+module github.com/yroc/postgres-storage
 
 go 1.18
 

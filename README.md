@@ -2,8 +2,6 @@
 
 [![GoDoc](https://godoc.org/github.com/yroc92/certmagic-sqlstorage?status.svg)](https://godoc.org/github.com/yroc92/certmagic-sqlstorage)
 
-Forked from: https://github.com/yroc92/postgres-storage
-
 SQL storage for CertMagic/Caddy TLS data.
 
 Currently supports PostgreSQL but it'd be pretty easy to support other RDBs like
@@ -15,12 +13,25 @@ Now with support for Caddyfile and environment configuration.
 # Example
 - Valid values for sslmode are: disable, require, verify-ca, verify-full
 
-With vanilla JSON config file:
+## With vanilla JSON config file and single connection string:
 ```json
 {
 	  "storage": {
-	    	"module": "postgres",
-	    	"dbname": "certmagictest",
+		"module": "postgres",
+		"connection_string": "postgres://user:password@localhost:5432/postgres"
+	  }
+	  "app": {
+	    	...
+	  }
+}
+```
+
+## With vanilla JSON config file and separate fields:
+```json
+{
+	  "storage": {
+		"module": "postgres",
+		"dbname": "certmagictest",
 		"host": "localhost",
 		"password": "postgres",
 		"port": "5432",
@@ -39,6 +50,14 @@ With Caddyfile:
 
 {
 	storage postgres {
+		connection_string postgres://user:password@localhost:5432/postgres
+	}
+}
+
+or 
+
+{
+	storage postgres {
 		dbname certmagictest
 		host localhost
 		password postgres
@@ -51,6 +70,10 @@ With Caddyfile:
 
 From Environment:
 ```text
+POSTGRES_CONN_STRING
+
+or
+
 POSTGRES_HOST
 POSTGRES_PORT
 POSTGRES_USER
@@ -61,6 +84,14 @@ POSTGRES_SSLMODE
 
 Configuring with labels for usage with Swarm and docker-proxy (https://github.com/lucaslorentz/caddy-docker-proxy):
 ```yaml
+deploy:
+  labels:
+    # Set Storage definitions
+    caddy_0.storage: postgres
+    caddy_0.storage.connection_string: postgres://user:password@localhost:5432/postgres
+
+or
+
 deploy:
   labels:
     # Set Storage definitions
@@ -81,7 +112,7 @@ ARG CADDY_VERSION="2.6.2"
 FROM caddy:${CADDY_VERSION}-builder AS builder
 
 RUN xcaddy build \
-    --with github.com/gabrielmocan/postgres-storage
+    --with github.com/yroc92/postgres-storage
 
 FROM caddy:${CADDY_VERSION}-alpine
 
@@ -96,7 +127,7 @@ ARG CADDY_VERSION="2.6.2"
 FROM caddy:${CADDY_VERSION}-builder AS builder
 
 RUN xcaddy build \
-    --with github.com/gabrielmocan/postgres-storage      \
+    --with github.com/yroc92/postgres-storage      		 \
     --with github.com/lucaslorentz/caddy-docker-proxy/v2 \
     --with github.com/caddy-dns/cloudflare
 

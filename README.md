@@ -18,7 +18,7 @@ Now with support for Caddyfile and environment configuration.
 {
 	  "storage": {
 		"module": "postgres",
-		"connection_string": "postgres://user:password@localhost:5432/postgres"
+		"connection_string": "postgres://user:password@localhost:5432/postgres?sslmode=disable"
 	  }
 	  "app": {
 	    	...
@@ -50,7 +50,7 @@ With Caddyfile:
 
 {
 	storage postgres {
-		connection_string postgres://user:password@localhost:5432/postgres
+		connection_string postgres://user:password@localhost:5432/postgres?sslmode=disable
 	}
 }
 
@@ -88,7 +88,7 @@ deploy:
   labels:
     # Set Storage definitions
     caddy_0.storage: postgres
-    caddy_0.storage.connection_string: postgres://user:password@localhost:5432/postgres
+    caddy_0.storage.connection_string: postgres://user:password@localhost:5432/postgres?sslmode=disable
 
 or
 

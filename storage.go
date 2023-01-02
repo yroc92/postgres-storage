@@ -3,18 +3,141 @@ package certmagicsql
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"time"
 
+	"github.com/caddyserver/caddy/v2"
+	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/certmagic"
 	_ "github.com/lib/pq"
+	"go.uber.org/zap"
 )
 
 var (
 	_ certmagic.Storage = (*PostgresStorage)(nil)
 )
+
+type PostgresStorage struct {
+	logger *zap.Logger
+
+	QueryTimeout     time.Duration `json:"query_timeout,omitempty"`
+	LockTimeout      time.Duration `json:"lock_timeout,omitempty"`
+	Database         *sql.DB       `json:"-"`
+	Host             string        `json:"host,omitempty"`
+	Port             string        `json:"port,omitempty"`
+	User             string        `json:"user,omitempty"`
+	Password         string        `json:"password,omitempty"`
+	DBname           string        `json:"dbname,omitempty"`
+	SSLmode          string        `json:"sslmode,omitempty"` // Valid values for sslmode are: disable, require, verify-ca, verify-full
+	ConnectionString string        `json:"connection_string,omitempty"`
+}
+
+func init() {
+	caddy.RegisterModule(PostgresStorage{})
+}
+
+func (c *PostgresStorage) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
+	for d.Next() {
+		var value string
+
+		key := d.Val()
+
+		if !d.Args(&value) {
+			continue
+		}
+
+		switch key {
+		case "host":
+			c.Host = value
+		case "port":
+			c.Port = value
+		case "user":
+			c.User = value
+		case "password":
+			c.Password = value
+		case "dbname":
+			c.DBname = value
+		case "sslmode":
+			c.SSLmode = value
+		case "connection_string":
+			c.ConnectionString = value
+		}
+	}
+
+	return nil
+}
+
+func (c *PostgresStorage) Provision(ctx caddy.Context) error {
+	c.logger = ctx.Logger(c)
+
+	// Load Environment
+	if c.Host == "" {
+		c.Host = os.Getenv("POSTGRES_HOST")
+	}
+	if c.Port == "" {
+		c.Port = os.Getenv("POSTGRES_PORT")
+	}
+	if c.User == "" {
+		c.User = os.Getenv("POSTGRES_USER")
+	}
+	if c.Password == "" {
+		c.Password = os.Getenv("POSTGRES_PASSWORD")
+	}
+	if c.DBname == "" {
+		c.DBname = os.Getenv("POSTGRES_DBNAME")
+	}
+	if c.SSLmode == "" {
+		c.SSLmode = os.Getenv("POSTGRES_SSLMODE")
+	}
+	if c.ConnectionString == "" {
+		c.ConnectionString = os.Getenv("POSTGRES_CONN_STRING")
+	}
+	if c.QueryTimeout == 0 {
+		c.QueryTimeout = time.Second * 3
+	}
+	if c.LockTimeout == 0 {
+		c.LockTimeout = time.Minute
+	}
+
+	return nil
+}
+
+func (PostgresStorage) CaddyModule() caddy.ModuleInfo {
+	return caddy.ModuleInfo{
+		ID: "caddy.storage.postgres",
+		New: func() caddy.Module {
+			return new(PostgresStorage)
+		},
+	}
+}
+
+func NewStorage(c PostgresStorage) (certmagic.Storage, error) {
+	var connStr string
+	if len(c.ConnectionString) > 0 {
+		connStr = c.ConnectionString
+	} else {
+		connStr_fmt := "host=%s port=%s user=%s password=%s dbname=%s sslmode=%s"
+		// Set each value dynamically w/ Sprintf
+		connStr = fmt.Sprintf(connStr_fmt, c.Host, c.Port, c.User, c.Password, c.DBname, c.SSLmode)
+	}
+
+	database, err := sql.Open("postgres", connStr)
+	if err != nil {
+		return nil, err
+	}
+	s := &PostgresStorage{
+		Database:     database,
+		QueryTimeout: c.QueryTimeout,
+		LockTimeout:  c.LockTimeout,
+	}
+	return s, s.ensureTableSetup()
+}
+
+func (c *PostgresStorage) CertMagicStorage() (certmagic.Storage, error) {
+	return NewStorage(*c)
+}
 
 // DB represents the required database API. You can use a *database/sql.DB.
 type DB interface {
@@ -22,39 +145,6 @@ type DB interface {
 	ExecContext(context.Context, string, ...interface{}) (sql.Result, error)
 	QueryRowContext(context.Context, string, ...interface{}) *sql.Row
 	QueryContext(context.Context, string, ...interface{}) (*sql.Rows, error)
-}
-
-// NewStorage creates a new storage instance. The `db` you pass in will likely be a
-// *database/sql.DB. This method will create the required metadata tables if necessary
-// (certmagic_data and certmagic_locks).
-func NewStorage(storage PostgresStorage) (certmagic.Storage, error) {
-	if storage.QueryTimeout == 0 {
-		storage.QueryTimeout = time.Second * 3
-	}
-	if storage.LockTimeout == 0 {
-		storage.LockTimeout = time.Minute
-	}
-	if len(storage.ConnectionString) == 0 {
-		return nil, errors.New("please provide a valid Postgres connection URL")
-	}
-	database, err := sql.Open("postgres", storage.ConnectionString)
-	if err != nil {
-		return nil, err
-	}
-	s := &PostgresStorage{
-		Database:         database,
-		QueryTimeout:     storage.QueryTimeout,
-		LockTimeout:      storage.LockTimeout,
-		ConnectionString: storage.ConnectionString,
-	}
-	return s, s.ensureTableSetup()
-}
-
-type PostgresStorage struct {
-	QueryTimeout     time.Duration `json:"query_timeout,omitempty"`
-	LockTimeout      time.Duration `json:"lock_timeout,omitempty"`
-	Database         *sql.DB       `json:"-"`
-	ConnectionString string        `json:"connection_string,omitempty"`
 }
 
 // Database RDBs this library supports, currently supports Postgres only.

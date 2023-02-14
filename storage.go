@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/caddyserver/caddy/v2"
@@ -32,6 +33,7 @@ type PostgresStorage struct {
 	DBname           string        `json:"dbname,omitempty"`
 	SSLmode          string        `json:"sslmode,omitempty"` // Valid values for sslmode are: disable, require, verify-ca, verify-full
 	ConnectionString string        `json:"connection_string,omitempty"`
+	DisableDDL       bool          `json:"disable_ddl,omitempty"`
 }
 
 func init() {
@@ -63,6 +65,12 @@ func (c *PostgresStorage) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 			c.SSLmode = value
 		case "connection_string":
 			c.ConnectionString = value
+		case "disable_ddl":
+			var err error
+			c.DisableDDL, err = strconv.ParseBool(value)
+			if err != nil {
+				return fmt.Errorf(`parsing disable_ddl value %+v: %w`, value, err)
+			}
 		}
 	}
 
@@ -84,6 +92,16 @@ func (c *PostgresStorage) Provision(ctx caddy.Context) error {
 	}
 	if c.Password == "" {
 		c.Password = os.Getenv("POSTGRES_PASSWORD")
+	}
+	if !c.DisableDDL {
+		disableDDLString := os.Getenv("POSTGRES_DISABLE_DDL")
+		if disableDDLString != "" {
+			var err error
+			c.DisableDDL, err = strconv.ParseBool(disableDDLString)
+			if err != nil {
+				return fmt.Errorf(`parsing POSTGRES_DISABLE_DDL value %+v: %w`, disableDDLString, err)
+			}
+		}
 	}
 	if c.DBname == "" {
 		c.DBname = os.Getenv("POSTGRES_DBNAME")
@@ -131,6 +149,7 @@ func NewStorage(c PostgresStorage) (certmagic.Storage, error) {
 		Database:     database,
 		QueryTimeout: c.QueryTimeout,
 		LockTimeout:  c.LockTimeout,
+		DisableDDL:   c.DisableDDL,
 	}
 	return s, s.ensureTableSetup()
 }
@@ -157,6 +176,23 @@ const (
 func (s *PostgresStorage) ensureTableSetup() error {
 	ctx, cancel := context.WithTimeout(context.Background(), s.QueryTimeout)
 	defer cancel()
+	if s.DisableDDL {
+		// Only check if tables exist with expected columns; do not attempt to create them
+		tx, err := s.Database.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		_, err = tx.ExecContext(ctx, `select key, value, modified from certmagic_data limit 0`)
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `select key, expires from certmagic_locks limit 0`)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
 	tx, err := s.Database.BeginTx(ctx, nil)
 	if err != nil {
 		return err

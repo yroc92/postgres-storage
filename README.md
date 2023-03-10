@@ -16,31 +16,33 @@ Now with support for Caddyfile and environment configuration.
 ## With vanilla JSON config file and single connection string:
 ```json
 {
-	  "storage": {
-		"module": "postgres",
-		"connection_string": "postgres://user:password@localhost:5432/postgres?sslmode=disable"
-	  }
-	  "app": {
-	    	...
-	  }
+  "storage": {
+    "module": "postgres",
+    "connection_string": "postgres://user:password@localhost:5432/postgres?sslmode=disable",
+    "disable_ddl": false
+  },
+  "app": {
+    ...
+  }
 }
 ```
 
 ## With vanilla JSON config file and separate fields:
 ```json
 {
-	  "storage": {
-		"module": "postgres",
-		"dbname": "certmagictest",
-		"host": "localhost",
-		"password": "postgres",
-		"port": "5432",
-		"sslmode": "disable",
-		"user": "postgres"
-	  }
-	  "app": {
-	    	...
-	  }
+  "storage": {
+    "module": "postgres",
+    "dbname": "certmagictest",
+    "host": "localhost",
+    "password": "postgres",
+    "port": "5432",
+    "sslmode": "disable",
+    "user": "postgres",
+    "disable_ddl": false
+  },
+  "app": {
+    ...
+  }
 }
 ```
 
@@ -49,28 +51,31 @@ With Caddyfile:
 # Global Config
 
 {
-	storage postgres {
-		connection_string postgres://user:password@localhost:5432/postgres?sslmode=disable
-	}
+  storage postgres {
+    connection_string postgres://user:password@localhost:5432/postgres?sslmode=disable
+    disable_ddl false
+  }
 }
-
+```
 or 
-
+```Caddyfile
 {
-	storage postgres {
-		dbname certmagictest
-		host localhost
-		password postgres
-		port 5432
-		sslmode disable
-		user postgres
-	}
+  storage postgres {
+    dbname certmagictest
+    host localhost
+    password postgres
+    port 5432
+    sslmode disable
+    user postgres
+    disable_ddl false
+  }
 }
 ```
 
 From Environment:
 ```text
 POSTGRES_CONN_STRING
+POSTGRES_DISABLE_DDL
 
 or
 
@@ -80,6 +85,7 @@ POSTGRES_USER
 POSTGRES_PASSWORD
 POSTGRES_DBNAME
 POSTGRES_SSLMODE
+POSTGRES_DISABLE_DDL
 ```
 
 Configuring with labels for usage with Swarm and docker-proxy (https://github.com/lucaslorentz/caddy-docker-proxy):
@@ -89,9 +95,10 @@ deploy:
     # Set Storage definitions
     caddy_0.storage: postgres
     caddy_0.storage.connection_string: postgres://user:password@localhost:5432/postgres?sslmode=disable
-
+    caddy_0.storage.disable_ddl: false
+```
 or
-
+```yaml
 deploy:
   labels:
     # Set Storage definitions
@@ -102,6 +109,7 @@ deploy:
     caddy_0.storage.password: postgres
     caddy_0.storage.dbname: certmagictest
     caddy_0.storage.sslmode: disable
+    caddy_0.storage.disable_ddl: false
 ```
 
 # Build vanilla Docker image
